@@ -281,7 +281,7 @@ export const useCachedProducts = ({
     } else {
       fetchSubcategoryProducts();
     }
-  }, [selectedCategory, isDeals, fetchDealsProducts, fetchSubcategoryProducts, fetchAllProducts]);
+  }, [selectedCategory, isDeals]); // Removed function dependencies to prevent unnecessary re-runs
 
   return data;
 };

@@ -6,6 +6,7 @@ import { twMerge } from "tailwind-merge";
 import PriceFormatter from "./PriceFormatter";
 import { Button } from "./ui/button";
 import useCartStore from "@/store";
+import { useOptimizedCart } from "@/hooks/useOptimizedCart";
 import QuantityButtons from "./QuantityButtons";
 import { Plus } from "lucide-react";
 
@@ -15,7 +16,7 @@ interface Props {
 }
 
 const AddToCartButton = ({ product, className }: Props) => {
-  const { addItem, getItemCount } = useCartStore();
+  const { addItem, getItemCount } = useOptimizedCart();
   const [isClient, setIsClient] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const itemCount = getItemCount(product?.id);
@@ -24,11 +25,11 @@ const AddToCartButton = ({ product, className }: Props) => {
   useEffect(() => {
     setIsClient(true);
   }, []);
-  
+
   if (!isClient) {
     return null;
   }
-  
+
   return (
     <div className="h-8">
       {itemCount ? (
@@ -47,8 +48,8 @@ const AddToCartButton = ({ product, className }: Props) => {
                 `${product?.name?.substring(0, 12)}... added successfully!`
               );
             } catch (error) {
-              console.error('Failed to add item to cart:', error);
-              toast.error('Failed to add item to cart');
+              console.error("Failed to add item to cart:", error);
+              toast.error("Failed to add item to cart");
             } finally {
               setTimeout(() => setIsAdding(false), 1000);
             }

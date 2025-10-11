@@ -1,12 +1,17 @@
-'use client';
+"use client";
 import React, { useState, useEffect } from "react";
 import ProductGrid from "./ProductGrid";
 import ProductRow from "./ProductRow";
 import Categories, { Category } from "./Categories";
 import { Product } from "../store";
 import DiscountBanner from "./DiscountBanner";
-import { getProducts, getProductsWithPricing, getSubcategories, getProductsBySubcategoryWithPricing } from "../lib/api";
-import { useCachedProducts } from "../hooks/useCachedProducts";
+import {
+  getProducts,
+  getProductsWithPricing,
+  getSubcategories,
+  getProductsBySubcategoryWithPricing,
+} from "../lib/api";
+import { usePaginatedProducts } from "../hooks/usePaginatedProducts";
 import { useCategory } from "../contexts/CategoryContext";
 
 interface Props {
@@ -18,28 +23,49 @@ interface Props {
   isDealsSelected?: boolean; // Whether deals is selected from parent
 }
 
-const ProductList = ({ products, categories, title, storeId, selectedCategoryId, isDealsSelected }: Props) => {
+const ProductList = ({
+  products,
+  categories,
+  title,
+  storeId,
+  selectedCategoryId,
+  isDealsSelected,
+}: Props) => {
   // Use category context for global state management
-  const { selectedCategoryId: contextCategoryId, isDealsSelected: contextIsDeals, setSelectedCategory, setLastVisitedCategory } = useCategory();
-  
+  const {
+    selectedCategoryId: contextCategoryId,
+    isDealsSelected: contextIsDeals,
+    setSelectedCategory,
+    setLastVisitedCategory,
+  } = useCategory();
+
   // Filter out invalid products to prevent errors
-  const validProducts = products.filter(product => 
-    product && 
-    product.id && 
-    product.name && 
-    typeof product.id === 'number' && 
-    typeof product.name === 'string'
+  const validProducts = products.filter(
+    (product) =>
+      product &&
+      product.id &&
+      product.name &&
+      typeof product.id === "number" &&
+      typeof product.name === "string"
   );
-  
+
   // Use context values if available, otherwise fall back to props (for store pages)
-  const selectedCategory = storeId ? (selectedCategoryId ?? null) : contextCategoryId;
+  const selectedCategory = storeId
+    ? (selectedCategoryId ?? null)
+    : contextCategoryId;
   const isDeals = storeId ? (isDealsSelected ?? false) : contextIsDeals;
-  
+
   // Category selection handler
-  const handleCategorySelect = (categoryId: number | null, isDealsSelected: boolean = false) => {
+  const handleCategorySelect = (
+    categoryId: number | null,
+    isDealsSelected: boolean = false
+  ) => {
     if (storeId) {
       // For store pages, we don't use context
-      console.log("📦 ProductList - Store page category selection:", { categoryId, isDealsSelected });
+      console.log("📦 ProductList - Store page category selection:", {
+        categoryId,
+        isDealsSelected,
+      });
     } else {
       // For homepage, use context
       setSelectedCategory(categoryId, isDealsSelected);
@@ -47,35 +73,44 @@ const ProductList = ({ products, categories, title, storeId, selectedCategoryId,
     }
   };
 
-  // Use the cached products hook
+  // Use paginated products hook for efficient lazy loading
   const {
-    dealsProducts,
+    products: paginatedProducts,
     subcategories,
-    subcategoryProducts,
     parentCategoryNames,
-    loadingDeals,
-    loadingSubcategories
-  } = useCachedProducts({
+    parentProducts,
+    subcategoryProducts,
+    loadedSubcategories,
+    loadingSubcategories,
+    loading,
+    loadingMore,
+    hasMore,
+    loadMore,
+    loadSubcategoryProducts,
+    preloadNextSubcategories,
+    currentPage,
+    totalProducts,
+  } = usePaginatedProducts({
     selectedCategory,
     isDeals,
     storeId,
-    categories
+    categories,
+    pageSize: 60, // Increased page size to show more products per category
   });
 
   // Clean console logs - only show once when data changes
-  if (validProducts.length > 0 && validProducts.length !== (window as any).lastProductCount) {
-    console.log("📦 ProductList - Products:", validProducts.length, "Categories:", categories.length);
+  if (
+    validProducts.length > 0 &&
+    validProducts.length !== (window as any).lastProductCount
+  ) {
+    console.log(
+      "📦 ProductList - Products:",
+      validProducts.length,
+      "Categories:",
+      categories.length
+    );
     (window as any).lastProductCount = validProducts.length;
   }
-
-
-
-  // For "All" category, we'll use the original products array with better filtering
-
-  console.log("ProductList - All products:", validProducts);
-  console.log("ProductList - Selected category ID:", selectedCategory);
-  console.log("ProductList - Is deals selected:", isDeals);
-  console.log("ProductList - Categories:", categories);
 
   return (
     <div>
@@ -84,94 +119,94 @@ const ProductList = ({ products, categories, title, storeId, selectedCategoryId,
 
       {title && selectedCategory === null && !isDeals && (
         <div className="pb-5">
-          <h2 className="text-2xl font-semibold text-gray-600">
-            All Products
-          </h2>
+          <h2 className="text-2xl font-semibold text-gray-600">All Products</h2>
         </div>
       )}
-      
+
       {isDeals ? (
         <div>
-          {loadingDeals ? (
-            <div className="text-center py-10 text-gray-500">
-              Loading deals...
-            </div>
-          ) : (
-            <div>
-              {/* <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
-                <p className="text-green-800 font-semibold">
-                  🎯 Deals Category Active - Showing {dealsProducts.length} discounted products
-                </p>
-              </div> */}
-              <ProductRow
-                products={dealsProducts}
-                categoryName="Deals & Discounts"
-                categoryId="deals"
-              />
-            </div>
-          )}
+          <ProductRow
+            products={paginatedProducts}
+            categoryName="Deals & Discounts"
+            categoryId="deals"
+            loading={loading}
+            loadingMore={loadingMore}
+            onLoadMore={loadMore}
+            hasMore={hasMore}
+          />
         </div>
       ) : selectedCategory ? (
         // Show subcategories and their products when a specific category is selected
         <div>
-          {loadingSubcategories ? (
-            <div className="text-center py-10 text-gray-500">
-              Loading subcategories...
-            </div>
-          ) : subcategories.length > 0 ? (
-            subcategories.map((subcategory) => {
-              const productsInSubcategory = subcategoryProducts[subcategory.id] || [];
-              
-              if (productsInSubcategory.length === 0) {
-                return null; // Don't show subcategory if it has no products
-              }
-
+          {subcategories.length > 0 ? (
+            subcategories.map((subcategory, index) => {
               // Set parent category ID for back navigation
               (window as any).currentParentCategoryId = selectedCategory;
+              const subcategoryProductsList = subcategoryProducts[subcategory.id] || [];
+              const isLoaded = loadedSubcategories[subcategory.id] || false;
+              const isLoading = loadingSubcategories[subcategory.id] || false;
 
               return (
                 <ProductRow
                   key={subcategory.id}
-                  products={productsInSubcategory}
+                  products={subcategoryProductsList}
                   categoryName={subcategory.name}
                   categoryId={subcategory.id.toString()}
+                  loading={isLoading}
+                  loadingMore={false}
+                  onLoadMore={() => {
+                    loadSubcategoryProducts(subcategory.id);
+                    preloadNextSubcategories(index, subcategories);
+                  }}
+                  hasMore={false}
+                  isLoaded={isLoaded}
+                  onScrollIntoView={() => {
+                    if (!isLoaded && !isLoading) {
+                      loadSubcategoryProducts(subcategory.id);
+                      preloadNextSubcategories(index, subcategories);
+                    }
+                  }}
                 />
               );
             })
           ) : (
             <div className="text-center py-10 text-gray-500">
-              No subcategories found for this category.
+              {loading
+                ? "Loading subcategories..."
+                : "No subcategories found for this category."}
             </div>
           )}
         </div>
       ) : (
         // Show all products grouped by parent categories when "All" is selected
         <div>
-          {loadingSubcategories ? (
-            <div className="text-center py-10 text-gray-500">
-              Loading all products...
-            </div>
-          ) : Object.keys(subcategoryProducts).length > 0 ? (
-            Object.keys(subcategoryProducts).map((parentId) => {
-              const productsInParentCategory = subcategoryProducts[parseInt(parentId)] || [];
-              const parentCategoryName = parentCategoryNames[parseInt(parentId)] || 'Unknown Category';
-              
-              if (productsInParentCategory.length === 0) {
-                return null; // Don't show parent category if it has no products
-              }
+          {Object.keys(parentCategoryNames).length > 0 ? (
+            Object.keys(parentCategoryNames).map((parentId) => {
+              const parentCategoryName =
+                parentCategoryNames[parseInt(parentId)] || "Unknown Category";
+              const categoryProducts = parentProducts[parseInt(parentId)] || [];
+
+              // Set flag to indicate this is a parent category from "All" view
+              (window as any).isParentCategoryFromAll = true;
 
               return (
                 <ProductRow
                   key={parentId}
-                  products={productsInParentCategory}
+                  products={categoryProducts}
                   categoryName={parentCategoryName}
                   categoryId={parentId}
+                  loading={loading}
+                  loadingMore={loadingMore}
+                  onLoadMore={loadMore}
+                  hasMore={hasMore}
                 />
               );
             })
           ) : (
             <div className="text-center py-10 text-gray-500">
-              No products available at the moment.
+              {loading
+                ? "Loading all products..."
+                : "No products available at the moment."}
             </div>
           )}
         </div>

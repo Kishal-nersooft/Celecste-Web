@@ -200,6 +200,9 @@ const useCartStore = create<CartState>()(
         const state = get();
         if (!state.cartId || !state.isCartCreated) return true;
         
+        // Only validate numeric cart IDs
+        if (typeof state.cartId !== 'number') return true;
+        
         try {
           const { getCartDetails } = await import('./lib/api');
           await getCartDetails(state.cartId);
@@ -366,6 +369,12 @@ const useCartStore = create<CartState>()(
           // Add items to the valid cart
           for (const localItem of currentState.items) {
             try {
+              // Ensure cartId is a number before making API call
+              if (typeof currentState.cartId !== 'number') {
+                console.warn('⚠️ Cart ID is not numeric, skipping backend sync');
+                continue;
+              }
+              
               await addItemToCart(currentState.cartId, {
                 product_id: localItem.product.id,
                 quantity: localItem.quantity
@@ -379,7 +388,7 @@ const useCartStore = create<CartState>()(
                 await currentState.resetCartOnPermissionError();
                 // Retry with the new cart
                 const newState = get();
-                if (newState.cartId) {
+                if (newState.cartId && typeof newState.cartId === 'number') {
                   try {
                     await addItemToCart(newState.cartId, {
                       product_id: localItem.product.id,
@@ -456,4 +465,5 @@ const useCartStore = create<CartState>()(
   )
 );
 
+export { useCartStore };
 export default useCartStore;

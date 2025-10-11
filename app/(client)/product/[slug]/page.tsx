@@ -14,7 +14,7 @@ import { Product } from "../../../../store";
 import { getProductById, getProducts } from "@/lib/api";
 
 // Force dynamic rendering
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 const ProductPage = async ({
   params,
@@ -26,43 +26,47 @@ const ProductPage = async ({
   const product = await getProductById(slug, [1]);
 
   // Debug logging to check product data and pricing
-  console.log('=== PRODUCT PAGE DEBUG ===');
-  console.log('Product ID/Slug:', slug);
-  console.log('Full Product Data:', JSON.stringify(product, null, 2));
-  console.log('Pricing Data:', product?.pricing);
-  console.log('Discount Applied:', product?.pricing?.discount_applied);
-  console.log('Discount Percentage:', product?.pricing?.discount_percentage);
-  console.log('Final Price:', product?.pricing?.final_price);
-  console.log('Base Price:', product?.pricing?.base_price);
-  console.log('Legacy Price:', product?.price);
-  console.log('Inventory Data:', product?.inventory);
-  console.log('Image URLs:', product?.image_urls);
-  console.log('Product Name:', product?.name);
-  console.log('Product Brand:', product?.brand);
-  console.log('========================');
+  console.log("=== PRODUCT PAGE DEBUG ===");
+  console.log("Product ID/Slug:", slug);
+  console.log("Full Product Data:", JSON.stringify(product, null, 2));
+  console.log("Pricing Data:", product?.pricing);
+  console.log("Discount Applied:", product?.pricing?.discount_applied);
+  console.log("Discount Percentage:", product?.pricing?.discount_percentage);
+  console.log("Final Price:", product?.pricing?.final_price);
+  console.log("Base Price:", product?.pricing?.base_price);
+  console.log("Legacy Price:", product?.price);
+  console.log("Inventory Data:", product?.inventory);
+  console.log("Image URLs:", product?.image_urls);
+  console.log("Product Name:", product?.name);
+  console.log("Product Brand:", product?.brand);
+  console.log("========================");
 
   // Test direct API call to verify pricing data
   try {
     const testUrl = `https://celeste-api-846811285865.us-central1.run.app/products/${slug}?include_pricing=true&include_categories=true&include_inventory=true&store_id=1`;
-    console.log('🧪 Testing direct API call:', testUrl);
-    
+    console.log("🧪 Testing direct API call:", testUrl);
+
     const testResponse = await fetch(testUrl, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Content-Type': 'application/json',
-      }
+        "Content-Type": "application/json",
+      },
     });
-    
+
     if (testResponse.ok) {
       const testData = await testResponse.json();
-      console.log('🧪 Direct API Response:', JSON.stringify(testData, null, 2));
-      console.log('🧪 Direct API Pricing:', testData.data?.pricing);
-      console.log('🧪 Direct API Inventory:', testData.data?.inventory);
+      console.log("🧪 Direct API Response:", JSON.stringify(testData, null, 2));
+      console.log("🧪 Direct API Pricing:", testData.data?.pricing);
+      console.log("🧪 Direct API Inventory:", testData.data?.inventory);
     } else {
-      console.error('🧪 Direct API Error:', testResponse.status, testResponse.statusText);
+      console.error(
+        "🧪 Direct API Error:",
+        testResponse.status,
+        testResponse.statusText
+      );
     }
   } catch (error) {
-    console.error('🧪 Direct API Test Failed:', error);
+    console.error("🧪 Direct API Test Failed:", error);
   }
 
   // Note: Homepage comparison removed due to server-side rendering issues
@@ -71,44 +75,26 @@ const ProductPage = async ({
     return notFound();
   }
 
-  // If pricing is null, try to calculate it using the pricing API
+  // If pricing is null, create a basic pricing structure (no individual API calls)
   if (!product.pricing) {
-    console.log('🔄 Pricing is null, attempting to calculate pricing...');
-    try {
-      const { getProductPricing } = await import('@/lib/pricing-api');
-      const pricingData = await getProductPricing(product.id, 1, 1);
-      if (pricingData) {
-        product.pricing = pricingData;
-        console.log('✅ Calculated pricing data:', pricingData);
-      } else {
-        console.log('❌ Could not calculate pricing data');
-        // Create a fallback pricing object
-        product.pricing = {
-          base_price: product.base_price,
-          final_price: product.base_price,
-          discount_applied: 0,
-          discount_percentage: 0,
-          applied_price_lists: []
-        };
-        console.log('📝 Using fallback pricing:', product.pricing);
-      }
-    } catch (error) {
-      console.error('❌ Error calculating pricing:', error);
-      // Create a fallback pricing object
-      product.pricing = {
-        base_price: product.base_price,
-        final_price: product.base_price,
-        discount_applied: 0,
-        discount_percentage: 0,
-        applied_price_lists: []
-      };
-      console.log('📝 Using fallback pricing after error:', product.pricing);
-    }
+    console.log(
+      "📦 Creating basic pricing structure (individual pricing calls disabled)"
+    );
+    // Create a basic pricing object without making API calls
+    product.pricing = {
+      base_price: product.base_price || product.price || 0,
+      final_price: product.base_price || product.price || 0,
+      discount_applied: 0,
+      discount_percentage: 0,
+      applied_price_lists: [],
+    };
+    console.log("📝 Using basic pricing structure:", product.pricing);
   }
 
   // Get the first valid image URL
   const imageUrl = product?.image_urls?.[0] || product?.imageUrl;
-  const hasValidImage = imageUrl && imageUrl.trim() !== '' && imageUrl.startsWith('http');
+  const hasValidImage =
+    imageUrl && imageUrl.trim() !== "" && imageUrl.startsWith("http");
 
   return (
     <div>
@@ -116,21 +102,22 @@ const ProductPage = async ({
       <Container className="py-4">
         <SmartBackButton className="mb-4" />
       </Container>
-      
+
       <Container className="flex flex-col md:flex-row gap-10 py-10">
         {hasValidImage && (
           <div className="w-full md:w-1/2 h-auto border border-darkBlue/20 shadow-md rounded-md group overflow-hidden relative">
             {/* Discount Tag on Product Image */}
-            {product?.pricing?.applied_discounts && product.pricing.applied_discounts.length > 0 && (
-              <div className="absolute top-4 left-4 z-10">
-                <div className="bg-red-500 text-white text-lg font-bold px-4 py-2 rounded-lg shadow-lg">
-                  {product.pricing.applied_discounts[0].discount_value}% OFF
+            {product?.pricing?.applied_discounts &&
+              product.pricing.applied_discounts.length > 0 && (
+                <div className="absolute top-4 left-4 z-10">
+                  <div className="bg-red-500 text-white text-lg font-bold px-4 py-2 rounded-lg shadow-lg">
+                    {product.pricing.applied_discounts[0].discount_value}% OFF
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
             <Image
               src={imageUrl}
-              alt={product.name || 'Product image'}
+              alt={product.name || "Product image"}
               width={700}
               height={700}
               priority
@@ -142,17 +129,22 @@ const ProductPage = async ({
         <div className="w-full md:w-1/2 flex flex-col gap-5">
           <div>
             {/* Discount Tag for Product Page */}
-            {product?.pricing?.applied_discounts && product.pricing.applied_discounts.length > 0 && (
-              <div className="mb-4">
-                {/* <div className="bg-red-500 text-white text-lg font-bold px-4 py-2 rounded-lg inline-block shadow-lg">
+            {product?.pricing?.applied_discounts &&
+              product.pricing.applied_discounts.length > 0 && (
+                <div className="mb-4">
+                  {/* <div className="bg-red-500 text-white text-lg font-bold px-4 py-2 rounded-lg inline-block shadow-lg">
                   🎉 {product.pricing.applied_discounts[0].discount_value}% OFF - Limited Time Offer!
                 </div> */}
-              </div>
-            )}
-            
-            <p className="text-lg font-bold text-gray-800 mb-1 uppercase tracking-wide">{product?.brand}</p>
+                </div>
+              )}
+
+            <p className="text-lg font-bold text-gray-800 mb-1 uppercase tracking-wide">
+              {product?.brand}
+            </p>
             <p className="text-4xl font-bold mb-2">{product?.name}</p>
-            <p className="text-sm text-gray-500 mb-2">{product?.unit_measure || product?.unit}</p>
+            <p className="text-sm text-gray-500 mb-2">
+              {product?.unit_measure || product?.unit}
+            </p>
             {/* <div className="flex items-center gap-2">
               <div className="text-lightText flex items-center gap-.5 text-sm">
                 {Array.from({ length: 5 }).map((_, index) => {
@@ -170,21 +162,27 @@ const ProductPage = async ({
             </div> */}
           </div>
           {/* Debug Information - Remove this after debugging */}
-          
 
           {/* Custom Price Display with Discount Styling */}
-          {product?.pricing?.applied_discounts && product.pricing.applied_discounts.length > 0 ? (
+          {product?.pricing?.applied_discounts &&
+          product.pricing.applied_discounts.length > 0 ? (
             <div className="flex items-center gap-3">
               {/* Discount Percentage Badge */}
               {/* <span className="bg-red-500 text-white text-xs px-2 py-1 rounded font-bold">
                 {product.pricing.applied_discounts[0].discount_value}% OFF
               </span> */}
-              
+
               {/* Final Price in Red Background - Bigger text for discounted products */}
               <div className="bg-red-500 text-white text-lg font-bold px-2 py-1 rounded-md">
-                LKR {(product?.pricing?.final_price || product?.base_price || product?.price || 0).toFixed(2)}
+                LKR{" "}
+                {(
+                  product?.pricing?.final_price ||
+                  product?.base_price ||
+                  product?.price ||
+                  0
+                ).toFixed(2)}
               </div>
-              
+
               {/* Base Price with Strikethrough */}
               <div className="text-gray-500 text-sm line-through">
                 LKR {(product?.pricing?.base_price || 0).toFixed(2)}
@@ -192,24 +190,33 @@ const ProductPage = async ({
             </div>
           ) : (
             <div className="text-2xl font-bold text-gray-800">
-              LKR {(product?.pricing?.final_price || product?.base_price || product?.price || 0).toFixed(2)}
+              LKR{" "}
+              {(
+                product?.pricing?.final_price ||
+                product?.base_price ||
+                product?.price ||
+                0
+              ).toFixed(2)}
             </div>
           )}
-          
+
           {/* Savings Amount Display */}
-          {product?.pricing?.applied_discounts && product.pricing.applied_discounts.length > 0 && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-center gap-2">
-                <span className="text-green-600 font-semibold">💰 You Save:</span>
-                <span className="text-green-700 font-bold text-lg">
-                  LKR {product.pricing.savings.toFixed(2)}
-                </span>
-                <span className="text-green-600 text-sm">
-                  ({product.pricing.applied_discounts[0].discount_value}% off)
-                </span>
+          {product?.pricing?.applied_discounts &&
+            product.pricing.applied_discounts.length > 0 && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-600 font-semibold">
+                    💰 You Save:
+                  </span>
+                  <span className="text-green-700 font-bold text-lg">
+                    LKR {product.pricing.savings.toFixed(2)}
+                  </span>
+                  <span className="text-green-600 text-sm">
+                    ({product.pricing.applied_discounts[0].discount_value}% off)
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
           {/* Stock display removed as it's not in the new Product interface */}
 
           {/* <p className="text-base text-gray-800">

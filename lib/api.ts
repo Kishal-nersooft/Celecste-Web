@@ -529,7 +529,19 @@ export async function getProductsBySubcategoryWithPricing(
     longitude
   );
   
-  return products;
+  // Only calculate pricing for fetched products (not all products)
+  const productsWithPricing = products.map(product => ({
+    ...product,
+    pricing: product.pricing || {
+      base_price: product.base_price || product.price || 0,
+      final_price: product.base_price || product.price || 0,
+      discount_applied: 0,
+      discount_percentage: 0,
+      applied_price_lists: []
+    }
+  }));
+  
+  return productsWithPricing;
 }
 
 // Get all parent categories only
@@ -911,26 +923,27 @@ export async function getProductsWithPricing(
 
   console.log(`📦 Found ${products.length} products from backend`);
   
-  // Check if products have pricing data
-  const productsWithPricing = products.filter((p: any) => p.pricing !== null && p.pricing !== undefined);
-  const productsWithoutPricing = products.filter((p: any) => p.pricing === null || p.pricing === undefined);
+  // Only calculate pricing for fetched products (not all products)
+  const productsWithPricing = products.map(product => ({
+    ...product,
+    pricing: product.pricing || {
+      base_price: product.base_price || product.price || 0,
+      final_price: product.base_price || product.price || 0,
+      discount_applied: 0,
+      discount_percentage: 0,
+      applied_price_lists: []
+    }
+  }));
   
   console.log(`📊 Products with pricing: ${productsWithPricing.length}`);
-  console.log(`📊 Products without pricing: ${productsWithoutPricing.length}`);
-  
-  // If no products have pricing data, we need to fetch it individually
-  if (productsWithPricing.length === 0 && products.length > 0) {
-    console.log(`⚠️ No pricing data from backend, fetching individually...`);
-    return await enrichProductsWithIndividualPricing(products);
-  }
-
-  return products;
+  return productsWithPricing;
 }
 
 // Optimized function specifically for deals - use backend's only_discounted filtering
 export async function getDiscountedProductsOptimized(
   pageSize: number = 50, // Smaller page size for deals
-  storeIds?: number[]
+  storeIds?: number[],
+  cursor?: string | null
 ) {
   console.log(`🎯 Getting discounted products (using backend filtering)...`);
   
@@ -947,98 +960,161 @@ export async function getDiscountedProductsOptimized(
   );
 
   console.log(`✅ Found ${products.length} discounted products from backend`);
-  return products;
+  
+  // Only calculate pricing for fetched products (not all products)
+  const productsWithPricing = products.map(product => ({
+    ...product,
+    pricing: product.pricing || {
+      base_price: product.base_price || product.price || 0,
+      final_price: product.base_price || product.price || 0,
+      discount_applied: 0,
+      discount_percentage: 0,
+      applied_price_lists: []
+    }
+  }));
+  
+  return productsWithPricing;
 }
 
-// Function to enrich products with individual pricing calculations (fallback when backend doesn't provide pricing)
-async function enrichProductsWithIndividualPricing(products: any[], tierId: number = 1) {
-  console.log(`🔄 Enriching ${products.length} products with individual pricing calls...`);
+// Enhanced pagination function with cursor support
+export async function getProductsWithCursorPagination(
+  categoryIds: number[] | null = null,
+  pageSize: number = 20,
+  cursor?: string | null,
+  onlyDiscounted: boolean = false,
+  storeIds?: number[]
+) {
+  const params = new URLSearchParams();
+  params.append('limit', pageSize.toString());
+  params.append('include_pricing', 'true');
+  params.append('include_categories', 'true');
+  params.append('include_inventory', 'true');
   
-  // Create parallel pricing calls for all products
-  const pricingPromises = products.map(async (product) => {
-    try {
-      const pricing = await getProductPricing(product.id, tierId);
-      
-      if (pricing) {
-        const discountPercentage = pricing.savings > 0 ? Math.round((pricing.savings / pricing.base_price) * 100) : 0;
-        
-        return {
-          ...product,
-          pricing: {
-            base_price: pricing.base_price,
-            final_price: pricing.final_price,
-            discount_applied: pricing.savings,
-            discount_percentage: discountPercentage,
-            applied_price_lists: pricing.applied_discounts?.map((d: any) => d.price_list_name) || []
-          }
-        };
-      } else {
-        // Add empty pricing object for non-discounted products
-        return {
-          ...product,
-          pricing: {
-            base_price: product.base_price,
-            final_price: product.base_price,
-            discount_applied: 0,
-            discount_percentage: 0,
-            applied_price_lists: []
-          }
-        };
-      }
-    } catch (error) {
-      console.error(`Error getting pricing for product ${product.id}:`, error);
-      // Add product without pricing if calculation fails
-      return {
-        ...product,
-        pricing: {
-          base_price: product.base_price,
-          final_price: product.base_price,
-          discount_applied: 0,
-          discount_percentage: 0,
-          applied_price_lists: []
-        }
-      };
+  if (cursor) {
+    params.append('cursor', cursor);
+  }
+  
+  if (storeIds && storeIds.length > 0) {
+    storeIds.forEach(id => params.append('store_id', id.toString()));
+  }
+  
+  if (categoryIds && categoryIds.length > 0) {
+    categoryIds.forEach(id => params.append('category_ids', id.toString()));
+  }
+  
+  if (onlyDiscounted) {
+    params.append('only_discounted', 'true');
+  }
+  
+  const url = `${getBaseUrl()}/products?${params.toString()}`;
+  console.log("🔍 API - Fetching products with cursor pagination:", url.split('?')[0]);
+  
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(url, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      ...authHeaders
     }
   });
   
-  // Wait for all pricing calls to complete in parallel
-  const enrichedProducts = await Promise.all(pricingPromises);
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("❌ API Error:", errorText);
+    throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`);
+  }
   
-  console.log(`✅ Enriched ${enrichedProducts.length} products with individual pricing data`);
-  return enrichedProducts;
+  const data = await response.json();
+  const products = data.data?.products || [];
+  const pagination = data.data?.pagination;
+  
+  // Only calculate pricing for fetched products
+  const productsWithPricing = products.map((product: any) => ({
+    ...product,
+    pricing: product.pricing || {
+      base_price: product.base_price || product.price || 0,
+      final_price: product.base_price || product.price || 0,
+      discount_applied: 0,
+      discount_percentage: 0,
+      applied_price_lists: []
+    }
+  }));
+  
+  return {
+    products: productsWithPricing,
+    pagination: {
+      hasMore: pagination?.has_more || false,
+      nextCursor: pagination?.next_cursor || null,
+      totalCount: pagination?.total_count || products.length
+    }
+  };
 }
 
-// Individual product pricing function (for specific use cases)
-async function getProductPricing(productId: number, tierId: number = 1, quantity: number = 1) {
-  try {
-    const isServer = typeof window === 'undefined';
-    
-    let url;
-    if (isServer) {
-      // On server side, use the external API directly
-      url = `${API_BASE_URL}/pricing/calculate/product/${productId}?tier_id=${tierId}&quantity=${quantity}`;
-    } else {
-      // On client side, use local API proxy to avoid CORS issues
-      url = `/api/pricing/calculate/product/${productId}?tier_id=${tierId}&quantity=${quantity}`;
-    }
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
+// Get products by parent category with pagination
+export async function getProductsByParentCategoryWithPagination(
+  parentCategoryId: number,
+  pageSize: number = 18,
+  cursor?: string | null,
+  storeIds?: number[]
+) {
+  // First get all subcategories of the parent category
+  const subcategories = await getSubcategories(parentCategoryId);
+  const subcategoryIds = subcategories.map(sub => sub.id);
+  
+  if (subcategoryIds.length === 0) {
+    return {
+      products: [],
+      pagination: {
+        hasMore: false,
+        nextCursor: null,
+        totalCount: 0
       }
-    });
-
-    if (!response.ok) {
-      throw new Error(`API responded with status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.data;
-  } catch (error) {
-    console.error('Error fetching product pricing:', error);
-    return null;
+    };
   }
+  
+  // Use the existing cursor pagination function with subcategory IDs
+  return getProductsWithCursorPagination(
+    subcategoryIds,
+    pageSize,
+    cursor,
+    false, // not only discounted
+    storeIds
+  );
+}
+
+// Function to enrich products with individual pricing calculations (DISABLED - causes too many requests)
+// This function is now disabled to prevent excessive API calls
+// Instead, we use basic pricing structure from product data
+async function enrichProductsWithIndividualPricing(products: any[], tierId: number = 1) {
+  console.log(`⚠️ Individual pricing enrichment disabled to prevent excessive API calls`);
+  console.log(`📦 Using basic pricing structure for ${products.length} products`);
+  
+  // Return products with basic pricing structure instead of making individual calls
+  return products.map(product => ({
+    ...product,
+    pricing: {
+      base_price: product.base_price || product.price || 0,
+      final_price: product.base_price || product.price || 0,
+      discount_applied: 0,
+      discount_percentage: 0,
+      applied_price_lists: []
+    }
+  }));
+}
+
+// Individual product pricing function (DISABLED - causes too many requests)
+// This function is now disabled to prevent excessive API calls
+// Use only for specific use cases where individual pricing is absolutely necessary
+async function getProductPricing(productId: number, tierId: number = 1, quantity: number = 1) {
+  console.log(`⚠️ Individual product pricing disabled to prevent excessive API calls`);
+  console.log(`📦 Product ID: ${productId}, Tier: ${tierId}, Quantity: ${quantity}`);
+  
+  // Return null to indicate pricing is not available
+  // This prevents the excessive API calls
+  return null;
 }
 
 // ==================== USER REGISTRATION API FUNCTIONS ====================

@@ -1,6 +1,6 @@
 "use client";
 import { Product } from "../store";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import ProductCard from "./ProductCard";
 import ProductCardSkeleton from "./ProductCardSkeleton";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,11 +16,10 @@ interface Props {
   loadingMore?: boolean;
   onLoadMore?: () => void;
   hasMore?: boolean;
-  isLoaded?: boolean;
-  onScrollIntoView?: () => void;
 }
 
-const ProductRow = ({
+// Client-side component for interactive features
+const ProductRowClient = ({
   products,
   categoryName,
   categoryId,
@@ -28,11 +27,8 @@ const ProductRow = ({
   loadingMore = false,
   onLoadMore,
   hasMore = false,
-  isLoaded = false,
-  onScrollIntoView,
 }: Props) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const rowRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const router = useRouter();
@@ -47,38 +43,9 @@ const ProductRow = ({
   };
 
   // Check scroll buttons on mount and when products change
-  React.useEffect(() => {
+  useEffect(() => {
     checkScrollButtons();
   }, [products]);
-
-  // Intersection Observer for lazy loading
-  React.useEffect(() => {
-    if (!onScrollIntoView || isLoaded) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            onScrollIntoView();
-          }
-        });
-      },
-      {
-        threshold: 0.1, // Trigger when 10% of the element is visible
-        rootMargin: '50px', // Start loading 50px before the element comes into view
-      }
-    );
-
-    if (rowRef.current) {
-      observer.observe(rowRef.current);
-    }
-
-    return () => {
-      if (rowRef.current) {
-        observer.unobserve(rowRef.current);
-      }
-    };
-  }, [onScrollIntoView, isLoaded]);
 
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
@@ -137,8 +104,6 @@ const ProductRow = ({
     sessionStorage.setItem(`subcategory_${categoryId}_id`, categoryId);
 
     // Store parent category info for back navigation
-    // We need to get the parent category ID from the current context
-    // This will be set by the parent component that knows the parent category
     const parentCategoryId = (window as any).currentParentCategoryId;
     if (parentCategoryId) {
       sessionStorage.setItem(
@@ -149,26 +114,15 @@ const ProductRow = ({
 
     // For "all" category, redirect to a special route or handle differently
     if (categoryId === "all") {
-      // You might want to create a special route for "all products" or handle this differently
       console.log("See all products clicked - all products already displayed");
       return;
     }
 
-    // Check if this is a parent category from "All" view
-    const isParentCategoryFromAll = (window as any).isParentCategoryFromAll;
-    if (isParentCategoryFromAll) {
-      // Store source tracking for back button behavior
-      sessionStorage.setItem('category_source', 'all');
-      // Navigate to parent category page
-      router.push(`/categories/${categoryId}`);
-    } else {
-      // Regular subcategory navigation
-      router.push(`/categories/${categoryId}`);
-    }
+    router.push(`/categories/${categoryId}`);
   };
 
   return (
-    <div ref={rowRef} className="mb-8">
+    <div className="mb-8">
       {/* Header with category name and See All button */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-semibold text-gray-600">{categoryName}</h2>
@@ -221,21 +175,11 @@ const ProductRow = ({
             msOverflowStyle: "none",
           }}
         >
-          {!isLoaded && loading
+          {loading && visibleProducts.length === 0
             ? // Show skeleton cards for initial loading
               Array.from({ length: 6 }).map((_, index) => (
                 <div
                   key={`skeleton-${index}`}
-                  className="flex-shrink-0 w-[180px] sm:w-[200px]"
-                >
-                  <ProductCardSkeleton />
-                </div>
-              ))
-            : !isLoaded
-            ? // Show skeleton cards when not loaded yet
-              Array.from({ length: 6 }).map((_, index) => (
-                <div
-                  key={`skeleton-unloaded-${index}`}
                   className="flex-shrink-0 w-[180px] sm:w-[200px]"
                 >
                   <ProductCardSkeleton />
@@ -276,4 +220,4 @@ const ProductRow = ({
   );
 };
 
-export default ProductRow;
+export default ProductRowClient;

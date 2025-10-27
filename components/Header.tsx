@@ -8,15 +8,10 @@ import Container from "./Container";
 import Image from "next/image";
 import logo from "@/images/logo.png";
 import { BsBasket } from "react-icons/bs";
-import { FiUser } from "react-icons/fi";
 import Title from "./Title";
 import { useAuth } from "@/components/FirebaseAuthProvider";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import toast from "react-hot-toast";
 import { SidePanel } from "./SidePanel";
 import LocationSelector from "./LocationSelector";
-import CacheRefreshButton from "./CacheRefreshButton";
 import CartPreviewPanel from "./CartPreviewPanel";
 import useCartStore from "@/store";
 import { useLocation } from "@/contexts/LocationContext";
@@ -31,19 +26,6 @@ export const Header = () => {
 
   const handleLocationSelect = (location: string) => {
     setSelectedLocation(location);
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      // Clear cart store on logout to prevent permission issues
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('cart-store');
-      }
-      toast.success("Signed out successfully!");
-    } catch (error: any) {
-      toast.error(error.message);
-    }
   };
 
   return (
@@ -104,16 +86,19 @@ export const Header = () => {
                 <FiUser className="w-6 h-6" />
                 Orders
               </Link> */}
-              <button onClick={handleSignOut} className="flex items-center text-sm gap-2 border border-gray-200 px-2 py-1 rounded-md shadow-md hover:shadow-none hoverEffect bg-white text-red-600">
-                Sign Out
-              </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Link href="/sign-in" className="text-sm text-blue-600 hover:underline">
+            <div className="flex items-center gap-3">
+              <Link 
+                href="/sign-in" 
+                className="px-4 py-2 bg-gray-200 text-black font-bold rounded-full text-sm hover:bg-gray-300 transition-colors duration-200 shadow-sm hover:shadow-md"
+              >
                 Sign In
               </Link>
-              <Link href="/sign-up" className="text-sm text-blue-600 hover:underline">
+              <Link 
+                href="/sign-up" 
+                className="px-4 py-2 bg-gray-200 text-black font-bold rounded-full text-sm hover:bg-gray-300 transition-colors duration-200 shadow-sm hover:shadow-md"
+              >
                 Sign Up
               </Link>
             </div>

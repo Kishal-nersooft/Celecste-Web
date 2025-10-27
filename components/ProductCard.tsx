@@ -97,18 +97,20 @@ const ProductCard = memo(({ product }: { product: Product }) => {
               setLastVisitedCategory(selectedCategoryId, isDealsSelected);
             }}
           >
-            <Image
-              src={imageUrl}
-              alt={product.name || "Product image"}
-              width={500}
-              height={500}
-              loading="lazy"
-              className={`w-full h-full object-cover overflow-hidden transition-transform duration-500 group-hover:scale-105`}
-              onError={(e) => {
-                console.error("Image failed to load:", e);
-                e.currentTarget.style.display = "none";
-              }}
-            />
+            {imageUrl && (
+              <Image
+                src={imageUrl}
+                alt={product.name || "Product image"}
+                width={500}
+                height={500}
+                loading="lazy"
+                className={`w-full h-full object-cover overflow-hidden transition-transform duration-500 group-hover:scale-105`}
+                onError={(e) => {
+                  console.error("Image failed to load:", e);
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            )}
           </Link>
         )}
       </div>

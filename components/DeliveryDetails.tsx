@@ -9,23 +9,22 @@ import { MapPin, Truck, ShoppingBag, AlertCircle } from "lucide-react";
 import CartLocationSelector from "./CartLocationSelector";
 import { useLoadScript, GoogleMap, Marker } from "@react-google-maps/api";
 import toast from "react-hot-toast";
+import { useLocation } from "@/contexts/LocationContext";
 
 const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyB1zVZ0tZ4O1VuOpmDp8ArAq6NZZBjcExI";
-const libraries: ("places" | "drawing" | "geometry" | "localContext" | "visualization")[] = ["places"];
+const libraries: ("places" | "drawing" | "geometry" | "visualization")[] = ["places"];
 
 interface DeliveryDetailsProps {
   onLocationChange: (location: string) => void;
-  onOrderTypeChange: (orderType: 'delivery' | 'pickup') => void;
   selectedLocation: string;
-  selectedOrderType: 'delivery' | 'pickup';
 }
 
 const DeliveryDetails: React.FC<DeliveryDetailsProps> = ({
   onLocationChange,
-  onOrderTypeChange,
-  selectedLocation,
-  selectedOrderType
+  selectedLocation
 }) => {
+  // Use LocationContext for order type
+  const { deliveryType: selectedOrderType, setDeliveryType } = useLocation();
   const [mapCenter, setMapCenter] = useState({ lat: 6.9271, lng: 79.8612 }); // Colombo, Sri Lanka
   const [markerPosition, setMarkerPosition] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -47,7 +46,7 @@ const DeliveryDetails: React.FC<DeliveryDetailsProps> = ({
   };
 
   const handleOrderTypeChange = (value: string) => {
-    onOrderTypeChange(value as 'delivery' | 'pickup');
+    setDeliveryType(value as 'delivery' | 'pickup');
   };
 
   const isLocationSelected = selectedLocation && selectedLocation !== "Location";
@@ -143,6 +142,7 @@ const DeliveryDetails: React.FC<DeliveryDetailsProps> = ({
             </div>
           </RadioGroup>
         </div>
+
 
         {/* Delivery Information */}
         {/* {selectedOrderType === 'delivery' && isLocationSelected && (

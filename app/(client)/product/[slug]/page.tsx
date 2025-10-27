@@ -1,94 +1,128 @@
+"use client";
+
 import AddToCartButton from "@/components/AddToCartButton";
 import Container from "@/components/Container";
 import PriceView from "@/components/PriceView";
 import SmartBackButton from "@/components/SmartBackButton";
+import { useAuth } from "@/components/FirebaseAuthProvider";
+import { useLocation } from "@/contexts/LocationContext";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { FaRegQuestionCircle } from "react-icons/fa";
 import { FiShare2 } from "react-icons/fi";
 import { LuStar } from "react-icons/lu";
 import { RxBorderSplit } from "react-icons/rx";
 import { TbTruckDelivery } from "react-icons/tb";
 import { Product } from "../../../../store";
-import { getProductById, getProducts } from "@/lib/api";
+import { getProductById, getProductsWithPricing } from "@/lib/api";
 
-// Force dynamic rendering
-export const dynamic = "force-dynamic";
+const ProductPage = ({ params }: { params: { slug: string } }) => {
+  const { user, loading: authLoading } = useAuth();
+  const { defaultAddress, isLocationLoading } = useLocation();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const { slug } = params;
 
-const ProductPage = async ({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) => {
-  const { slug } = await params;
-  // Pass store_id=1 to ensure pricing data is calculated
-  const product = await getProductById(slug, [1]);
+  // Fetch product data with authentication
+  useEffect(() => {
+    const fetchProduct = async () => {
+      if (authLoading || isLocationLoading) return; // Wait for auth and location to be ready
+      
+      if (!user) {
+        setError("Please sign in to view product details");
+        setLoading(false);
+        return;
+      }
 
-  // Debug logging to check product data and pricing
-  console.log("=== PRODUCT PAGE DEBUG ===");
-  console.log("Product ID/Slug:", slug);
-  console.log("Full Product Data:", JSON.stringify(product, null, 2));
-  console.log("Pricing Data:", product?.pricing);
-  console.log("Discount Applied:", product?.pricing?.discount_applied);
-  console.log("Discount Percentage:", product?.pricing?.discount_percentage);
-  console.log("Final Price:", product?.pricing?.final_price);
-  console.log("Base Price:", product?.pricing?.base_price);
-  console.log("Legacy Price:", product?.price);
-  console.log("Inventory Data:", product?.inventory);
-  console.log("Image URLs:", product?.image_urls);
-  console.log("Product Name:", product?.name);
-  console.log("Product Brand:", product?.brand);
-  console.log("========================");
+      try {
+        console.log("🔍 ProductPage - Fetching product with authentication...");
+        console.log("🔍 ProductPage - User authenticated:", !!user);
+        console.log("🔍 ProductPage - Product slug:", slug);
+        console.log("🔍 ProductPage - Default address:", defaultAddress);
+        
+        setLoading(true);
+        setError(null);
 
-  // Test direct API call to verify pricing data
-  try {
-    const testUrl = `https://celeste-api-846811285865.us-central1.run.app/products/${slug}?include_pricing=true&include_categories=true&include_inventory=true&store_id=1`;
-    console.log("🧪 Testing direct API call:", testUrl);
+        // Get latitude and longitude from user's default address
+        const latitude = defaultAddress?.latitude;
+        const longitude = defaultAddress?.longitude;
 
-    const testResponse = await fetch(testUrl, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+        console.log("🔍 ProductPage - Using location:", { latitude, longitude });
 
-    if (testResponse.ok) {
-      const testData = await testResponse.json();
-      console.log("🧪 Direct API Response:", JSON.stringify(testData, null, 2));
-      console.log("🧪 Direct API Pricing:", testData.data?.pricing);
-      console.log("🧪 Direct API Inventory:", testData.data?.inventory);
-    } else {
-      console.error(
-        "🧪 Direct API Error:",
-        testResponse.status,
-        testResponse.statusText
-      );
+        // Use latitude and longitude for proper inventory lookup (no store IDs)
+        const foundProduct = await getProductById(
+          slug, // Product ID/slug
+          undefined, // No store IDs - let backend determine based on location
+          latitude, // User's latitude
+          longitude // User's longitude
+        );
+
+        if (!foundProduct) {
+          console.log("❌ ProductPage - Product not found:", slug);
+          setError("Product not found");
+          return;
+        }
+
+        console.log("✅ ProductPage - Found product:", {
+          id: foundProduct.id,
+          name: foundProduct.name,
+          pricing: foundProduct.pricing
+        });
+
+        setProduct(foundProduct);
+      } catch (error) {
+        console.error("❌ ProductPage - Error fetching product:", error);
+        setError("Failed to load product");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProduct();
+  }, [user, authLoading, slug, defaultAddress, isLocationLoading]);
+
+  // Debug logging when product is loaded
+  useEffect(() => {
+    if (product) {
+      console.log("=== PRODUCT PAGE DEBUG ===");
+      console.log("Product ID/Slug:", slug);
+      console.log("Full Product Data:", JSON.stringify(product, null, 2));
+      console.log("Pricing Data:", product?.pricing);
+      console.log("Discount Applied:", product?.pricing?.discount_applied);
+      console.log("Discount Percentage:", product?.pricing?.discount_percentage);
+      console.log("Final Price:", product?.pricing?.final_price);
+      console.log("Base Price:", product?.pricing?.base_price);
+      console.log("Legacy Price:", product?.price);
+      // console.log("Inventory Data:", product?.inventory); // Inventory not available in Product type
+      console.log("Image URLs:", product?.image_urls);
+      console.log("Product Name:", product?.name);
+      console.log("Product Brand:", product?.brand);
+      console.log("========================");
     }
-  } catch (error) {
-    console.error("🧪 Direct API Test Failed:", error);
+  }, [product, slug]);
+
+  // Handle loading and error states
+  if (authLoading || isLocationLoading || loading) {
+    return (
+      <div className="text-center py-10">
+        <div className="text-gray-500">Loading product details...</div>
+      </div>
+    );
   }
 
-  // Note: Homepage comparison removed due to server-side rendering issues
+  if (error) {
+    return (
+      <div className="text-center py-10">
+        <div className="text-red-500">{error}</div>
+      </div>
+    );
+  }
 
   if (!product) {
     return notFound();
-  }
-
-  // If pricing is null, create a basic pricing structure (no individual API calls)
-  if (!product.pricing) {
-    console.log(
-      "📦 Creating basic pricing structure (individual pricing calls disabled)"
-    );
-    // Create a basic pricing object without making API calls
-    product.pricing = {
-      base_price: product.base_price || product.price || 0,
-      final_price: product.base_price || product.price || 0,
-      discount_applied: 0,
-      discount_percentage: 0,
-      applied_price_lists: [],
-    };
-    console.log("📝 Using basic pricing structure:", product.pricing);
   }
 
   // Get the first valid image URL
@@ -107,11 +141,11 @@ const ProductPage = async ({
         {hasValidImage && (
           <div className="w-full md:w-1/2 h-auto border border-darkBlue/20 shadow-md rounded-md group overflow-hidden relative">
             {/* Discount Tag on Product Image */}
-            {product?.pricing?.applied_discounts &&
-              product.pricing.applied_discounts.length > 0 && (
+            {((product?.pricing?.discount_applied && product.pricing.discount_applied > 0) || 
+              (product?.pricing?.discount_percentage && product.pricing.discount_percentage > 0)) && (
                 <div className="absolute top-4 left-4 z-10">
                   <div className="bg-red-500 text-white text-lg font-bold px-4 py-2 rounded-lg shadow-lg">
-                    {product.pricing.applied_discounts[0].discount_value}% OFF
+                    {Math.round(product.pricing?.discount_percentage || 0)}% OFF
                   </div>
                 </div>
               )}
@@ -129,8 +163,8 @@ const ProductPage = async ({
         <div className="w-full md:w-1/2 flex flex-col gap-5">
           <div>
             {/* Discount Tag for Product Page */}
-            {product?.pricing?.applied_discounts &&
-              product.pricing.applied_discounts.length > 0 && (
+            {((product?.pricing?.discount_applied && product.pricing.discount_applied > 0) || 
+              (product?.pricing?.discount_percentage && product.pricing.discount_percentage > 0)) && (
                 <div className="mb-4">
                   {/* <div className="bg-red-500 text-white text-lg font-bold px-4 py-2 rounded-lg inline-block shadow-lg">
                   🎉 {product.pricing.applied_discounts[0].discount_value}% OFF - Limited Time Offer!
@@ -164,12 +198,14 @@ const ProductPage = async ({
           {/* Debug Information - Remove this after debugging */}
 
           {/* Custom Price Display with Discount Styling */}
-          {product?.pricing?.applied_discounts &&
-          product.pricing.applied_discounts.length > 0 ? (
+          {((product?.pricing?.discount_applied && product.pricing.discount_applied > 0) || 
+            (product?.pricing?.discount_percentage && product.pricing.discount_percentage > 0)) ? (
             <div className="flex items-center gap-3">
               {/* Discount Percentage Badge */}
               {/* <span className="bg-red-500 text-white text-xs px-2 py-1 rounded font-bold">
-                {product.pricing.applied_discounts[0].discount_value}% OFF
+                {product.pricing?.discount_percentage || 
+                 product.pricing?.discount_applied || 
+                 0}% OFF
               </span> */}
 
               {/* Final Price in Red Background - Bigger text for discounted products */}
@@ -201,22 +237,24 @@ const ProductPage = async ({
           )}
 
           {/* Savings Amount Display */}
-          {product?.pricing?.applied_discounts &&
-            product.pricing.applied_discounts.length > 0 && (
+          {/* {((product?.pricing?.discount_applied && product.pricing.discount_applied > 0) || 
+            (product?.pricing?.discount_percentage && product.pricing.discount_percentage > 0)) && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <div className="flex items-center gap-2">
                   <span className="text-green-600 font-semibold">
                     💰 You Save:
                   </span>
                   <span className="text-green-700 font-bold text-lg">
-                    LKR {product.pricing.savings.toFixed(2)}
+                    LKR {((product.pricing?.base_price || 0) - (product.pricing?.final_price || 0)).toFixed(2)}
                   </span>
                   <span className="text-green-600 text-sm">
-                    ({product.pricing.applied_discounts[0].discount_value}% off)
+                    ({product.pricing?.discount_percentage || 
+                      product.pricing?.discount_applied || 
+                      0}% off)
                   </span>
                 </div>
               </div>
-            )}
+            )} */}
           {/* Stock display removed as it's not in the new Product interface */}
 
           {/* <p className="text-base text-gray-800">

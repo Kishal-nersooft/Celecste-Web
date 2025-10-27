@@ -5,6 +5,7 @@ import Container from "@/components/Container";
 import ProductList from "@/components/ProductList";
 import { getProductsWithPricing, getCategories } from "@/lib/api";
 import { useAuth } from "@/components/FirebaseAuthProvider";
+import { Product } from "@/store";
 import Link from "next/link";
 
 export default function DealsPage() {
@@ -31,7 +32,7 @@ export default function DealsPage() {
         // Filter to only products with discount_applied > 0
         console.log("🔍 Deals page: Filtering for products with discounts...");
         setLoadingProgress("Filtering discounted products...");
-        const productsResponse = allProductsResponse.filter(product => 
+        const productsResponse = allProductsResponse.filter((product: Product) => 
           product.pricing && 
           product.pricing.discount_applied !== null && 
           product.pricing.discount_applied !== undefined && 
@@ -122,9 +123,6 @@ export default function DealsPage() {
           <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
             <p className="font-semibold">Error loading deals:</p>
             <p className="text-sm mt-1">{error}</p>
-            <Link href="/debug-auth" className="text-blue-600 hover:underline mt-2 inline-block">
-              Debug Authentication
-            </Link>
           </div>
         )}
         

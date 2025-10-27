@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { MenuIcon, HomeIcon, UserIcon, HeartIcon, MapPinIcon, LogOutIcon, HelpCircleIcon } from "lucide-react";
+import { MenuIcon, HomeIcon, UserIcon, HeartIcon, MapPinIcon, LogOutIcon, HelpCircleIcon, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/FirebaseAuthProvider";
 import { signOut } from "firebase/auth";
@@ -96,6 +96,11 @@ export const SidePanel = () => {
                 onClick={() => setIsOpen(false)}>
                 <UserIcon className="h-5 w-5" />
                 Orders
+              </Link>
+              <Link href="/cart" className="flex items-center gap-2 text-lg font-medium hover:text-blue-600"
+                onClick={() => setIsOpen(false)}>
+                <ShoppingCart className="h-5 w-5" />
+                My Carts
               </Link>
               <Link href="/saved-address" className="flex items-center gap-2 text-lg font-medium hover:text-blue-600"
                 onClick={() => setIsOpen(false)}>

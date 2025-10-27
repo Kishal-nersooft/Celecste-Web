@@ -127,43 +127,54 @@ const ProductRow = ({
       typeof product.name === "string"
   );
 
+  // Debug logging for ProductRow
+  console.log(`🛍️ ProductRow - ${categoryName}:`, {
+    productsCount: products.length,
+    visibleProductsCount: visibleProducts.length,
+    loading,
+    isLoaded,
+    categoryId
+  });
+
   const handleSeeAllClick = () => {
-    // Store subcategory products and info for caching
-    sessionStorage.setItem(
-      `subcategory_${categoryId}_products`,
-      JSON.stringify(products)
-    );
-    sessionStorage.setItem(`subcategory_${categoryId}_name`, categoryName);
-    sessionStorage.setItem(`subcategory_${categoryId}_id`, categoryId);
-
-    // Store parent category info for back navigation
-    // We need to get the parent category ID from the current context
-    // This will be set by the parent component that knows the parent category
-    const parentCategoryId = (window as any).currentParentCategoryId;
-    if (parentCategoryId) {
+    if (typeof window !== 'undefined') {
+      // Store subcategory products and info for caching
       sessionStorage.setItem(
-        `subcategory_${categoryId}_parent_id`,
-        parentCategoryId.toString()
+        `subcategory_${categoryId}_products`,
+        JSON.stringify(products)
       );
-    }
+      sessionStorage.setItem(`subcategory_${categoryId}_name`, categoryName);
+      sessionStorage.setItem(`subcategory_${categoryId}_id`, categoryId);
 
-    // For "all" category, redirect to a special route or handle differently
-    if (categoryId === "all") {
-      // You might want to create a special route for "all products" or handle this differently
-      console.log("See all products clicked - all products already displayed");
-      return;
-    }
+      // Store parent category info for back navigation
+      // We need to get the parent category ID from the current context
+      // This will be set by the parent component that knows the parent category
+      const parentCategoryId = (window as any).currentParentCategoryId;
+      if (parentCategoryId) {
+        sessionStorage.setItem(
+          `subcategory_${categoryId}_parent_id`,
+          parentCategoryId.toString()
+        );
+      }
 
-    // Check if this is a parent category from "All" view
-    const isParentCategoryFromAll = (window as any).isParentCategoryFromAll;
-    if (isParentCategoryFromAll) {
-      // Store source tracking for back button behavior
-      sessionStorage.setItem('category_source', 'all');
-      // Navigate to parent category page
-      router.push(`/categories/${categoryId}`);
-    } else {
-      // Regular subcategory navigation
-      router.push(`/categories/${categoryId}`);
+      // For "all" category, redirect to a special route or handle differently
+      if (categoryId === "all") {
+        // You might want to create a special route for "all products" or handle this differently
+        console.log("See all products clicked - all products already displayed");
+        return;
+      }
+
+      // Check if this is a parent category from "All" view
+      const isParentCategoryFromAll = (window as any).isParentCategoryFromAll;
+      if (isParentCategoryFromAll) {
+        // Store source tracking for back button behavior
+        sessionStorage.setItem('category_source', 'all');
+        // Navigate to parent category page
+        router.push(`/categories/${categoryId}`);
+      } else {
+        // Regular subcategory navigation
+        router.push(`/categories/${categoryId}`);
+      }
     }
   };
 

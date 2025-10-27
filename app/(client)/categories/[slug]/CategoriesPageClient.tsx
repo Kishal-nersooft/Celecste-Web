@@ -75,12 +75,12 @@ const CategoriesPageClient = ({ categoryId, fallbackProducts }: Props) => {
         // First, try to determine if this is a parent category or subcategory
         // Get all parent categories to check if the ID matches
         const parentCategories = await getParentCategories();
-        const isParent = parentCategories.some(cat => cat.id === parseInt(categoryId));
+        const isParent = parentCategories.some((cat: any) => cat.id === parseInt(categoryId));
         
         if (isParent) {
           // This is a parent category - show all products from all subcategories
           setIsParentCategory(true);
-          setDisplayCategoryName(parentCategories.find(cat => cat.id === parseInt(categoryId))?.name || "");
+          setDisplayCategoryName(parentCategories.find((cat: any) => cat.id === parseInt(categoryId))?.name || "");
           
           // Load initial products (18 products)
           const result = await getProductsByParentCategoryWithPagination(

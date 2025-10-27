@@ -79,64 +79,37 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ onLocationSelect })
   React.useEffect(() => {
     if (isLoaded && window.google) {
       console.log('Google Maps loaded, initializing services...');
-      console.log('Available services:', {
-        AutocompleteService: !!window.google.maps.places.AutocompleteService,
-        Geocoder: !!window.google.maps.Geocoder,
-        PlacesService: !!window.google.maps.places.PlacesService
-      });
       
-      // Add a small delay to ensure Google Maps API is fully loaded
       const initServices = () => {
-        // Initialize AutocompleteSuggestion (new API)
-        if (window.google.maps.places.AutocompleteSuggestion) {
-          try {
-            const autocomplete = new window.google.maps.places.AutocompleteSuggestion();
-            console.log('AutocompleteSuggestion created:', autocomplete);
-            console.log('AutocompleteSuggestion methods:', Object.getOwnPropertyNames(autocomplete));
-            setAutocompleteService(autocomplete);
-          } catch (error) {
-            console.error('Error creating AutocompleteSuggestion:', error);
-            // Fallback to AutocompleteService if available
-            if (window.google.maps.places.AutocompleteService) {
-              try {
-                const fallbackAutocomplete = new window.google.maps.places.AutocompleteService();
-                console.log('Fallback AutocompleteService created:', fallbackAutocomplete);
-                setAutocompleteService(fallbackAutocomplete);
-              } catch (fallbackError) {
-                console.error('Error creating fallback AutocompleteService:', fallbackError);
-              }
-            }
-          }
-        } else if (window.google.maps.places.AutocompleteService) {
-          // Fallback to old API if new one is not available
+        // Initialize AutocompleteService (standard Places API)
+        if (window.google.maps.places.AutocompleteService) {
           try {
             const autocomplete = new window.google.maps.places.AutocompleteService();
-            console.log('Fallback AutocompleteService created:', autocomplete);
+            console.log('✅ AutocompleteService initialized');
             setAutocompleteService(autocomplete);
           } catch (error) {
-            console.error('Error creating fallback AutocompleteService:', error);
+            console.error('❌ Error creating AutocompleteService:', error);
           }
         } else {
-          console.error('Neither AutocompleteSuggestion nor AutocompleteService available');
+          console.error('❌ AutocompleteService not available');
         }
         
         // Initialize Geocoder
         if (window.google.maps.Geocoder) {
           try {
             const geocoder = new window.google.maps.Geocoder();
-            console.log('Geocoder created:', geocoder);
+            console.log('✅ Geocoder initialized');
             setGeocoderService(geocoder);
           } catch (error) {
-            console.error('Error creating Geocoder:', error);
+            console.error('❌ Error creating Geocoder:', error);
           }
+        } else {
+          console.error('❌ Geocoder not available');
         }
       };
       
-      // Try immediately
+      // Initialize services
       initServices();
-      
-      // Also try after a short delay as a fallback
-      setTimeout(initServices, 100);
     }
   }, [isLoaded]);
 
@@ -144,14 +117,22 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ onLocationSelect })
     if (typeof window !== "undefined") {
       const storedLocations = localStorage.getItem("recentLocations");
       if (storedLocations) {
-        setRecentLocations(JSON.parse(storedLocations));
+        try {
+          setRecentLocations(JSON.parse(storedLocations));
+        } catch (error) {
+          console.warn("Failed to parse recent locations from localStorage:", error);
+        }
       }
     }
   }, []);
 
   React.useEffect(() => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("recentLocations", JSON.stringify(recentLocations));
+      try {
+        localStorage.setItem("recentLocations", JSON.stringify(recentLocations));
+      } catch (error) {
+        console.warn("Failed to save recent locations to localStorage:", error);
+      }
     }
   }, [recentLocations]);
 
@@ -297,8 +278,10 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ onLocationSelect })
                 setDefaultAddress(addressData);
                 
                 // Save to localStorage for persistence
-                localStorage.setItem('selectedAddressId', addressId.toString());
-                localStorage.setItem('selectedAddress', location);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('selectedAddressId', addressId.toString());
+                  localStorage.setItem('selectedAddress', location);
+                }
                 console.log('✅ Address ID set in context and localStorage:', addressId);
               } else {
                 console.error('❌ Could not extract address ID from response:', newAddress);
@@ -366,75 +349,53 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ onLocationSelect })
 
   const fetchPredictions = React.useCallback(
     (input: string) => {
-      console.log('fetchPredictions called with:', { input, autocompleteService, hasGetPlacePredictions: !!autocompleteService?.getPlacePredictions });
-      
-      if (!input) {
-        console.log('No input provided');
+      if (!input || input.trim().length < 2) {
         setPredictions([]);
         return;
       }
       
-      // Try AutocompleteSuggestion first (new API)
-      if (autocompleteService) {
-        try {
-          // Check if it's the new AutocompleteSuggestion API
-          if (typeof autocompleteService.getPlacePredictions === 'function') {
-            console.log('Calling getPlacePredictions (AutocompleteService)...');
-            autocompleteService.getPlacePredictions(
-              { input, componentRestrictions: { country: "lk" } },
-              (predictions: any, status: any) => {
-                console.log('getPlacePredictions callback:', { predictions, status });
-                if (status === "OK" && predictions) {
-                  setPredictions(predictions);
-                } else {
-                  setPredictions([]);
-                  console.error("AutocompleteService failed due to: " + status);
-                }
-              }
-            );
-            return;
+      // Use AutocompleteService for address suggestions
+      if (autocompleteService && typeof autocompleteService.getPlacePredictions === 'function') {
+        autocompleteService.getPlacePredictions(
+          { 
+            input: input.trim(),
+            types: ['geocode', 'establishment']
+          },
+          (predictions: any, status: any) => {
+            if (status === "OK" && predictions) {
+              setPredictions(predictions);
+            } else if (status === "ZERO_RESULTS") {
+              setPredictions([]);
+            } else {
+              setPredictions([]);
+              console.error("AutocompleteService failed:", status);
+            }
           }
-          // Check if it's the new AutocompleteSuggestion API with different method names
-          else {
-            console.log('AutocompleteSuggestion API detected, but getPlacePredictions not available');
-            // For now, fall through to Geocoder
-          }
-        } catch (error) {
-          console.error("Error calling AutocompleteSuggestion:", error);
-        }
+        );
+        return;
       }
       
-      // Fallback: Use Geocoder for basic search
-      if (geocoderService) {
-        console.log('Using Geocoder fallback...');
-        try {
-          geocoderService.geocode(
-            { address: input, componentRestrictions: { country: "lk" } },
-            (results: any, status: any) => {
-              console.log('Geocoder callback:', { results, status });
-              if (status === "OK" && results) {
-                // Convert geocoder results to autocomplete-like format
-                const predictions = results.slice(0, 5).map((result: any, index: number) => ({
-                  place_id: `geocoder_${index}`,
-                  description: result.formatted_address,
-                  structured_formatting: {
-                    main_text: result.formatted_address.split(',')[0],
-                    secondary_text: result.formatted_address.split(',').slice(1).join(',').trim()
-                  }
-                }));
-                setPredictions(predictions);
-              } else {
-                setPredictions([]);
-                console.error("Geocoder failed due to: " + status);
-              }
+      // Fallback: Use Geocoder only if AutocompleteService is not available
+      if (!autocompleteService && geocoderService) {
+        geocoderService.geocode(
+          { address: input.trim() },
+          (results: any, status: any) => {
+            if (status === "OK" && results && results.length > 0) {
+              const predictions = results.slice(0, 5).map((result: any, index: number) => ({
+                place_id: `geocoder_${index}`,
+                description: result.formatted_address,
+                structured_formatting: {
+                  main_text: result.formatted_address.split(',')[0],
+                  secondary_text: result.formatted_address.split(',').slice(1).join(',').trim()
+                }
+              }));
+              setPredictions(predictions);
+            } else {
+              setPredictions([]);
             }
-          );
-        } catch (error) {
-          console.error("Error calling Geocoder:", error);
-          setPredictions([]);
-        }
+          }
+        );
       } else {
-        console.log('No services available');
         setPredictions([]);
       }
     },
@@ -458,7 +419,8 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ onLocationSelect })
         const { lat, lng } = results[0].geometry.location;
         setMapCenter({ lat: lat(), lng: lng() });
         setMarkerPosition({ lat: lat(), lng: lng() });
-        handleSelectLocation(results[0].formatted_address, prediction.structured_formatting.secondary_text);
+        // Use prediction.description instead of formatted_address to show the place name
+        handleSelectLocation(prediction.description, prediction.structured_formatting.secondary_text);
       } else {
         console.error("Geocode was not successful for the following reason: " + status);
       }
@@ -535,9 +497,9 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ onLocationSelect })
     <>
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="rounded-full w-40 text-left overflow-hidden whitespace-nowrap text-ellipsis">
-          <GlobeIcon className="mr-2 h-4 w-4" />
-          {selectedLocation}
+        <Button variant="outline" className="rounded-full min-w-[160px] max-w-[240px] flex items-center gap-2 overflow-hidden">
+          <GlobeIcon className="h-4 w-4 flex-shrink-0" />
+          <span className="truncate text-left flex-1 min-w-0">{selectedLocation}</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px]">
@@ -574,16 +536,18 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ onLocationSelect })
             {deliveryType === 'pickup' ? (
               // Store Selection View
               <div>
-                <div className="relative flex items-center mb-3 border rounded-lg px-3 py-2">
-                  <ArrowLeft className="mr-2 h-4 w-4 text-gray-500" />
-                  <input
-                    id="outlet-search"
-                    type="text"
-                    placeholder="Search Stores"
-                    className="flex-grow border-none focus:ring-0 outline-none text-sm"
-                    value={outletSearchQuery}
-                    onChange={(e) => setOutletSearchQuery(e.target.value)}
-                  />
+                  <div className="relative mb-3">
+                  <div className="flex items-center border rounded-lg px-3 py-2">
+                    <ArrowLeft className="mr-2 h-4 w-4 text-gray-500" />
+                    <input
+                      id="outlet-search"
+                      type="text"
+                      placeholder="Search Stores"
+                      className="flex-grow border-none focus:ring-0 outline-none text-sm"
+                      value={outletSearchQuery}
+                      onChange={(e) => setOutletSearchQuery(e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 {/* Select Outlet on Map Option */}
@@ -642,25 +606,28 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ onLocationSelect })
             ) : (
               // Delivery Location Selection View
               <div>
-                <div className="relative flex items-center mb-4 border rounded-lg px-3 py-2">
-                  <ArrowLeft className="mr-2 h-5 w-5 text-gray-500" />
-                  <input
-                    id="location-search"
-                    type="text"
-                    placeholder="Search Location"
-                    className="flex-grow border-none focus:ring-0 outline-none"
-                    value={searchQuery}
-                    onChange={handleSearchInputChange}
-                  />
+                <div className="relative mb-4">
+                  <div className="flex items-center border rounded-lg px-3 py-2">
+                    <ArrowLeft className="mr-2 h-5 w-5 text-gray-500" />
+                    <input
+                      id="location-search"
+                      type="text"
+                      placeholder="Search Location"
+                      className="flex-grow border-none focus:ring-0 outline-none"
+                      value={searchQuery}
+                      onChange={handleSearchInputChange}
+                    />
+                  </div>
                   {predictions.length > 0 && (
-                    <ul className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-md shadow-lg z-20 mt-1 max-h-60 overflow-y-auto">
+                    <ul className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-md shadow-lg z-50 mt-1 max-h-60 overflow-y-auto">
                       {predictions.map((prediction) => (
                         <li
                           key={prediction.place_id}
-                          className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                          className="px-4 py-2 cursor-pointer hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
                           onClick={() => handlePredictionClick(prediction)}
                         >
-                          {prediction.description}
+                          <div className="font-medium text-sm">{prediction.structured_formatting.main_text}</div>
+                          <div className="text-xs text-gray-500">{prediction.structured_formatting.secondary_text}</div>
                         </li>
                       ))}
                     </ul>

@@ -109,8 +109,8 @@ const AddressSelector: React.FC<AddressSelectorProps> = ({
           autocompleteService.getPlacePredictions(
             {
               input,
-              componentRestrictions: { country: 'lk' }, // Restrict to Sri Lanka
-              types: ['address']
+              types: ['geocode', 'establishment'],
+              sessionToken: new window.google.maps.places.AutocompleteSessionToken()
             },
             (predictions: any, status: any) => {
               if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
@@ -136,11 +136,14 @@ const AddressSelector: React.FC<AddressSelectorProps> = ({
     if (geocoderService) {
       try {
         geocoderService.geocode(
-          { address: input, componentRestrictions: { country: 'lk' } },
+          { 
+            address: input,
+            componentRestrictions: undefined // Remove any restrictions for global search
+          },
           (results: any, status: any) => {
-            if (status === window.google.maps.GeocoderStatus.OK && results) {
+            if (status === window.google.maps.GeocoderStatus.OK && results && results.length > 0) {
               // Convert geocoder results to autocomplete-like format
-              const predictions = results.slice(0, 5).map((result: any, index: number) => ({
+              const predictions = results.slice(0, 8).map((result: any, index: number) => ({
                 place_id: `geocoder_${index}`,
                 description: result.formatted_address,
                 structured_formatting: {
@@ -148,6 +151,7 @@ const AddressSelector: React.FC<AddressSelectorProps> = ({
                   secondary_text: result.formatted_address.split(',').slice(1).join(',').trim()
                 }
               }));
+              console.log('AddressSelector Geocoder predictions:', predictions);
               setPredictions(predictions);
               setShowPredictions(true);
             } else {

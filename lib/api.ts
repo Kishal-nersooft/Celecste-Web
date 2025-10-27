@@ -1,4 +1,4 @@
-export const API_BASE_URL = "https://celeste-api-846811285865.us-central1.run.app";
+export const API_BASE_URL = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "https://celeste-api-846811285865.asia-south1.run.app";
 export const LOCAL_API_BASE_URL = "/api";
 
 // Import product caching functions
@@ -372,8 +372,8 @@ export async function getProducts(
     storeIds.forEach(id => params.append('store_id', id.toString()));
   }
   
-  // Location params (if provided)
-  if (latitude !== undefined && longitude !== undefined) {
+  // Location params (if provided AND no store_ids) - for pickup mode, we don't use location
+  if (latitude !== undefined && longitude !== undefined && (!storeIds || storeIds.length === 0)) {
     params.append('latitude', latitude.toString());
     params.append('longitude', longitude.toString());
   }
@@ -482,8 +482,8 @@ export async function getProductsBySubcategory(
     storeIds.forEach(id => params.append('store_id', id.toString()));
   }
   
-  // Location params (if provided)
-  if (latitude !== undefined && longitude !== undefined) {
+  // Location params (if provided AND no store_ids) - for pickup mode, we don't use location
+  if (latitude !== undefined && longitude !== undefined && (!storeIds || storeIds.length === 0)) {
     params.append('latitude', latitude.toString());
     params.append('longitude', longitude.toString());
   }
@@ -530,7 +530,7 @@ export async function getProductsBySubcategoryWithPricing(
   );
   
   // Only calculate pricing for fetched products (not all products)
-  const productsWithPricing = products.map(product => ({
+  const productsWithPricing = products.map((product: any) => ({
     ...product,
     pricing: product.pricing || {
       base_price: product.base_price || product.price || 0,
@@ -599,14 +599,16 @@ export async function getProductById(
   params.append('include_pricing', 'true');
   params.append('include_categories', 'true');
   params.append('include_inventory', 'true');
+  // Ensure we get full pricing data including discounts
+  // The backend should return pricing data when include_pricing=true
   
   // Store IDs (if provided)
   if (storeIds && storeIds.length > 0) {
     storeIds.forEach(id => params.append('store_id', id.toString()));
   }
   
-  // Location params (if provided)
-  if (latitude !== undefined && longitude !== undefined) {
+  // Location params (if provided AND no store_ids) - for pickup mode, we don't use location
+  if (latitude !== undefined && longitude !== undefined && (!storeIds || storeIds.length === 0)) {
     params.append('latitude', latitude.toString());
     params.append('longitude', longitude.toString());
   }
@@ -829,8 +831,8 @@ export async function getAllProducts(
       storeIds.forEach(id => params.append('store_id', id.toString()));
     }
     
-    // Location params (if provided)
-    if (latitude !== undefined && longitude !== undefined) {
+    // Location params (if provided AND no store_ids) - for pickup mode, we don't use location
+    if (latitude !== undefined && longitude !== undefined && (!storeIds || storeIds.length === 0)) {
       params.append('latitude', latitude.toString());
       params.append('longitude', longitude.toString());
     }
@@ -924,7 +926,7 @@ export async function getProductsWithPricing(
   console.log(`📦 Found ${products.length} products from backend`);
   
   // Only calculate pricing for fetched products (not all products)
-  const productsWithPricing = products.map(product => ({
+  const productsWithPricing = products.map((product: any) => ({
     ...product,
     pricing: product.pricing || {
       base_price: product.base_price || product.price || 0,
@@ -962,7 +964,7 @@ export async function getDiscountedProductsOptimized(
   console.log(`✅ Found ${products.length} discounted products from backend`);
   
   // Only calculate pricing for fetched products (not all products)
-  const productsWithPricing = products.map(product => ({
+  const productsWithPricing = products.map((product: any) => ({
     ...product,
     pricing: product.pricing || {
       base_price: product.base_price || product.price || 0,
@@ -1062,7 +1064,7 @@ export async function getProductsByParentCategoryWithPagination(
 ) {
   // First get all subcategories of the parent category
   const subcategories = await getSubcategories(parentCategoryId);
-  const subcategoryIds = subcategories.map(sub => sub.id);
+  const subcategoryIds = subcategories.map((sub: any) => sub.id);
   
   if (subcategoryIds.length === 0) {
     return {
@@ -1093,7 +1095,7 @@ async function enrichProductsWithIndividualPricing(products: any[], tierId: numb
   console.log(`📦 Using basic pricing structure for ${products.length} products`);
   
   // Return products with basic pricing structure instead of making individual calls
-  return products.map(product => ({
+  return products.map((product: any) => ({
     ...product,
     pricing: {
       base_price: product.base_price || product.price || 0,
@@ -1287,7 +1289,7 @@ export async function addItemToCart(cartId: number, itemData: {
   return data;
 }
 
-// Update cart item quantity (owner only)
+// Update cart item quantity by item ID (owner only)
 export async function updateCartItemQuantity(cartId: number, itemId: number, quantity: number) {
   const authHeaders = await getAuthHeaders();
   const response = await fetch(`${getBaseUrl()}/users/me/carts/${cartId}/items/${itemId}`, {
@@ -1304,24 +1306,64 @@ export async function updateCartItemQuantity(cartId: number, itemId: number, qua
   return data;
 }
 
-// Remove product from cart or reduce quantity (owner only)
+// Update cart item quantity by product ID (finds item ID first)
+export async function updateCartItemQuantityByProductId(cartId: number, productId: number, quantity: number) {
+  try {
+    console.log(`🔍 updateCartItemQuantityByProductId called: cartId=${cartId}, productId=${productId}, quantity=${quantity}`);
+    
+    // First get cart details to find the item ID for this product
+    const cartDetails = await getCartDetails(cartId);
+    const cartData = cartDetails?.data || cartDetails;
+    const items = cartData?.items || [];
+    
+    console.log(`📦 Cart has ${items.length} items:`, items.map((i: any) => ({ id: i.id, product_id: i.product_id })));
+    
+    // Find the item with the matching product ID
+    const cartItem = items.find((item: any) => item.product_id === productId);
+    
+    if (!cartItem) {
+      console.log(`❌ Product ${productId} not found in cart ${cartId}`);
+      return null; // Item not in cart
+    }
+    
+    console.log(`✅ Found cart item: id=${cartItem.id}, product_id=${cartItem.product_id}`);
+    const itemId = cartItem.id;
+    return await updateCartItemQuantity(cartId, itemId, quantity);
+  } catch (error) {
+    console.error('❌ Error updating cart item quantity:', error);
+    throw error;
+  }
+}
+
+// Remove product from cart by product ID
 export async function removeFromCart(cartId: number, productId: number, quantity?: number) {
-  const params = new URLSearchParams();
-  if (quantity !== undefined) {
-    params.append('quantity', quantity.toString());
+  try {
+    console.log(`🔍 removeFromCart called: cartId=${cartId}, productId=${productId}, quantity=${quantity}`);
+    
+    const params = new URLSearchParams();
+    if (quantity !== undefined) {
+      params.append('quantity', quantity.toString());
+    }
+    
+    const authHeaders = await getAuthHeaders();
+    const url = `${getBaseUrl()}/users/me/carts/${cartId}/items/${productId}?${params.toString()}`;
+    console.log(`🌐 DELETE request to: ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: authHeaders
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to remove from cart: ${response.status} ${response.statusText}`);
+    }
+    
+    console.log(`✅ Successfully removed item from cart`);
+    return response.status === 204;
+  } catch (error) {
+    console.error('❌ Error removing from cart:', error);
+    throw error;
   }
-  
-  const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${getBaseUrl()}/users/me/carts/${cartId}/items/${productId}?${params.toString()}`, {
-    method: 'DELETE',
-    headers: authHeaders
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Failed to remove from cart: ${response.status} ${response.statusText}`);
-  }
-  
-  return response.status === 204;
 }
 
 // Share cart with another user (owner only)
@@ -1397,19 +1439,58 @@ export async function previewOrder(orderData: {
     mode: 'delivery' | 'pickup';
     address_id?: number | null;
     store_id?: number | null;
+    delivery_service_level?: string;
   };
+  split_order?: boolean;
 }) {
+  // Add default values for new required fields
+  const requestData = {
+    ...orderData,
+    location: {
+      ...orderData.location,
+      delivery_service_level: orderData.location.delivery_service_level || 'standard'
+    },
+    split_order: orderData.split_order !== undefined ? orderData.split_order : true
+  };
+
+  console.log('🔍 Preview order request data:', JSON.stringify(requestData, null, 2));
+
   const authHeaders = await getAuthHeaders();
   const response = await fetch(`${getBaseUrl()}/users/me/checkout/preview`, {
     method: 'POST',
     headers: authHeaders,
-    body: JSON.stringify(orderData)
+    body: JSON.stringify(requestData)
   });
   
   if (!response.ok) {
     const errorText = await response.text();
     console.error('❌ Preview order error response:', errorText);
     console.error('❌ Preview order error status:', response.status);
+    
+    // If we get a 422 error about address not found, clear the address and retry
+    if (response.status === 422 && errorText.includes('Address') && errorText.includes('not found')) {
+      console.log('🔄 Address not found, retrying without address...');
+      const retryData = {
+        ...requestData,
+        location: {
+          ...requestData.location,
+          address_id: null
+        }
+      };
+      
+      const retryResponse = await fetch(`${getBaseUrl()}/users/me/checkout/preview`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(retryData)
+      });
+      
+      if (retryResponse.ok) {
+        const data = await retryResponse.json();
+        console.log('✅ Preview order succeeded without address');
+        return data;
+      }
+    }
+    
     throw new Error(`Failed to preview order: ${response.status} ${response.statusText} - ${errorText}`);
   }
   
@@ -1424,7 +1505,15 @@ export async function createOrder(orderData: {
     mode: 'delivery' | 'pickup';
     address_id?: number | null;
     store_id?: number | null;
+    delivery_service_level?: string;
   };
+  delivery_charge?: number;
+  service_charge?: number;
+  tax?: number;
+  subtotal?: number;
+  total_amount?: number;
+  split_order?: boolean;
+  platform?: string;
 }) {
   const authHeaders = await getAuthHeaders();
   console.log('📤 CREATE ORDER - Sending data:', JSON.stringify(orderData, null, 2));
@@ -1472,7 +1561,8 @@ export async function checkInventoryAvailability(productIds: number[], storeId?:
     params.append('store_id', storeId.toString());
   }
   
-  if (latitude !== undefined && longitude !== undefined) {
+  // Location params (if provided AND no store_id) - for pickup mode, we don't use location
+  if (latitude !== undefined && longitude !== undefined && !storeId) {
     params.append('latitude', latitude.toString());
     params.append('longitude', longitude.toString());
   }
@@ -1564,9 +1654,17 @@ export async function verifyOrderPayment(orderId: string, paymentData: {
 }
 
 // Get all orders for the current user
-export async function getUserOrders(page: number = 1, limit: number = 20) {
+export async function getUserOrders(page: number = 1, limit: number = 20, includeProducts: boolean = true, includeStores: boolean = true, includeAddresses: boolean = true) {
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(`${getBaseUrl()}/users/me/orders?page=${page}&limit=${limit}`, {
+  const params = new URLSearchParams();
+  params.append('page', page.toString());
+  params.append('limit', limit.toString());
+  
+  if (includeProducts) params.append('include_products', 'true');
+  if (includeStores) params.append('include_stores', 'true');
+  if (includeAddresses) params.append('include_addresses', 'true');
+  
+  const response = await fetch(`${getBaseUrl()}/users/me/orders?${params.toString()}`, {
     method: 'GET',
     headers: authHeaders
   });
@@ -1653,4 +1751,152 @@ export async function getOrderByIdAdmin(orderId: string) {
   }
 
   return response.json();
+}
+
+// ==================== REORDER API FUNCTIONS ====================
+
+// Reorder functionality - Create new cart from completed order
+export async function createReorderCart(order: any) {
+  console.log('🔄 Creating reorder cart for order:', order.id);
+  
+  try {
+    // 1. Create new cart
+    const cartName = `Cart from ${new Date(order.createdAt).toLocaleDateString()}`;
+    const cartDescription = `Reorder from Order #${order.orderNumber || order.id}`;
+    
+    const newCart = await createCart({
+      name: cartName,
+      description: cartDescription
+    });
+    
+    console.log('✅ New reorder cart created:', newCart);
+    
+    // 2. Fetch fresh product data and add items to cart
+    const cartId = newCart.data?.id || newCart.id;
+    const addedItems = [];
+    
+    for (const orderItem of order.items || []) {
+      try {
+        // Fetch fresh product data
+        const freshProduct = await getProductById(orderItem.productId.toString());
+        
+        if (freshProduct) {
+          // Add to cart with original quantity
+          const cartItem = await addItemToCart(cartId, {
+            product_id: freshProduct.id,
+            quantity: orderItem.quantity
+          });
+          
+          addedItems.push({
+            product: freshProduct,
+            quantity: orderItem.quantity,
+            cartItem
+          });
+          
+          console.log(`✅ Added ${freshProduct.name} (qty: ${orderItem.quantity}) to reorder cart`);
+        } else {
+          console.warn(`⚠️ Product ${orderItem.productId} not found, skipping`);
+        }
+      } catch (error) {
+        console.error(`❌ Failed to add product ${orderItem.productId} to reorder cart:`, error);
+      }
+    }
+    
+    return {
+      cart: newCart,
+      cartId,
+      addedItems,
+      skippedItems: (order.items || []).length - addedItems.length
+    };
+    
+  } catch (error: any) {
+    console.error('❌ Failed to create reorder cart:', error);
+    throw new Error(`Failed to create reorder cart: ${error.message}`);
+  }
+}
+
+// Add reorder items to existing cart
+export async function addReorderItemsToExistingCart(cartId: number, order: any) {
+  console.log('🔄 Adding reorder items to existing cart:', cartId);
+  
+  try {
+    const addedItems = [];
+    const skippedItems = [];
+    
+    for (const orderItem of order.items || []) {
+      try {
+        // Fetch fresh product data
+        const freshProduct = await getProductById(orderItem.productId.toString());
+        
+        if (freshProduct) {
+          // Check if item already exists in cart
+          const cartDetails = await getCartDetails(cartId);
+          const existingItem = cartDetails.data?.items?.find(
+            (item: any) => item.product_id === freshProduct.id
+          );
+          
+          if (existingItem) {
+            // Update quantity (add to existing)
+            const newQuantity = existingItem.quantity + orderItem.quantity;
+            await updateCartItemQuantityByProductId(cartId, freshProduct.id, newQuantity);
+            console.log(`✅ Updated quantity for ${freshProduct.name} to ${newQuantity}`);
+          } else {
+            // Add new item
+            await addItemToCart(cartId, {
+              product_id: freshProduct.id,
+              quantity: orderItem.quantity
+            });
+            console.log(`✅ Added ${freshProduct.name} (qty: ${orderItem.quantity}) to existing cart`);
+          }
+          
+          addedItems.push({
+            product: freshProduct,
+            quantity: orderItem.quantity
+          });
+        } else {
+          skippedItems.push({
+            productId: orderItem.productId,
+            reason: 'Product not found'
+          });
+        }
+      } catch (error: any) {
+        console.error(`❌ Failed to add product ${orderItem.productId}:`, error);
+        skippedItems.push({
+          productId: orderItem.productId,
+          reason: error.message
+        });
+      }
+    }
+    
+    return {
+      addedItems,
+      skippedItems
+    };
+    
+  } catch (error: any) {
+    console.error('❌ Failed to add reorder items to existing cart:', error);
+    throw new Error(`Failed to add items to existing cart: ${error.message}`);
+  }
+}
+
+// Check if user has existing cart
+export async function checkUserHasExistingCart() {
+  try {
+    const carts = await getUserCarts();
+    const hasOwnedCarts = carts.owned_carts && carts.owned_carts.length > 0;
+    const hasSharedCarts = carts.shared_carts && carts.shared_carts.length > 0;
+    
+    return {
+      hasCarts: hasOwnedCarts || hasSharedCarts,
+      ownedCarts: carts.owned_carts || [],
+      sharedCarts: carts.shared_carts || []
+    };
+  } catch (error) {
+    console.error('❌ Failed to check existing carts:', error);
+    return {
+      hasCarts: false,
+      ownedCarts: [],
+      sharedCarts: []
+    };
+  }
 }

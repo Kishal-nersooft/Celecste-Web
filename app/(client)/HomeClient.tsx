@@ -7,6 +7,7 @@ import ProductList from "@/components/ProductList";
 import PopularItemsSection from "@/components/PopularItemsSection";
 import DiscountBanner from "@/components/DiscountBanner";
 import StoresGrid from "@/components/StoresGrid";
+import LocationLoadingIndicator from "@/components/LocationLoadingIndicator";
 import { useAuth } from "@/components/FirebaseAuthProvider";
 import { Product } from "../../store";
 import { Category } from "../../components/Categories";
@@ -21,7 +22,7 @@ const HomeClient: React.FC<HomeClientProps> = ({
   products: initialProducts,
   categories: initialCategories,
 }) => {
-  const { deliveryType } = useLocation();
+  const { deliveryType, defaultAddress, isLocationLoading, isLocationReady } = useLocation();
   const { user, loading: authLoading } = useAuth();
   const { selectedCategoryId, isDealsSelected, setLastVisitedCategory } =
     useCategory();
@@ -30,46 +31,66 @@ const HomeClient: React.FC<HomeClientProps> = ({
   const [loading, setLoading] = useState(false);
 
   // Clean console logs - only show once when data changes
-  if (
-    products.length > 0 &&
-    products.length !== (window as any).lastHomeProductCount
-  ) {
-    console.log("🏠 HomeClient - Products loaded:", products.length);
-    (window as any).lastHomeProductCount = products.length;
-  }
+  React.useEffect(() => {
+    if (
+      products.length > 0 &&
+      typeof window !== 'undefined' &&
+      products.length !== (window as any).lastHomeProductCount
+    ) {
+      console.log("🏠 HomeClient - Products loaded:", products.length);
+      (window as any).lastHomeProductCount = products.length;
+    }
+  }, [products.length]);
 
-  // Fetch data on client side after authentication is ready
+  // Fetch data on client side - optimized for quick loading with cached location
   useEffect(() => {
     const fetchData = async () => {
       // Only fetch products and categories for delivery mode
       if (deliveryType === "delivery") {
-        console.log("🏠 HomeClient - Fetching data for delivery mode...");
-        setLoading(true);
+        // If location is still loading, wait for it
+        if (isLocationLoading) {
+          console.log("🏠 HomeClient - Waiting for location data...");
+          return;
+        }
 
-        try {
-          const [productsResponse, categoriesResponse] = await Promise.all([
-            getProductsWithPricing(
-              null,
-              1,
-              20,
-              false,
-              true,
-              true,
-              [1, 2, 3, 4]
-            ), // Reduced page size to 20 for better performance
-            getParentCategories(),
-          ]);
+        // If location is ready, fetch immediately with cached coordinates
+        if (isLocationReady && defaultAddress) {
+          console.log("🏠 HomeClient - Location ready, fetching data with cached coordinates...");
+          setLoading(true);
 
-          console.log("🏠 HomeClient - Data fetched successfully");
+          try {
+            const latitude = defaultAddress.latitude;
+            const longitude = defaultAddress.longitude;
+            console.log("📍 Using cached coordinates for immediate stock loading:", { latitude, longitude });
 
-          setProducts(Array.isArray(productsResponse) ? productsResponse : []);
-          setCategories(
-            Array.isArray(categoriesResponse) ? categoriesResponse : []
-          );
-        } catch (error) {
-          console.error("HomeClient - Error fetching data:", error);
-        } finally {
-          setLoading(false);
+            const [productsResponse, categoriesResponse] = await Promise.all([
+              getProductsWithPricing(
+                null,
+                1,
+                20,
+                false,
+                true,
+                true,
+                [1, 2, 3, 4], // Store IDs
+                latitude,     // Latitude for inventory data
+                longitude     // Longitude for inventory data
+              ),
+              getParentCategories(),
+            ]);
+
+            console.log("🏠 HomeClient - Data fetched successfully with stock information");
+
+            setProducts(Array.isArray(productsResponse) ? productsResponse : []);
+            setCategories(
+              Array.isArray(categoriesResponse) ? categoriesResponse : []
+            );
+          } catch (error) {
+            console.error("HomeClient - Error fetching data:", error);
+          } finally {
+            setLoading(false);
+          }
+        } else {
+          console.log("⚠️ Location not ready, skipping data fetch");
         }
       } else {
         // For pickup mode, no need to fetch products or categories
@@ -83,7 +104,7 @@ const HomeClient: React.FC<HomeClientProps> = ({
     if (!authLoading) {
       fetchData();
     }
-  }, [authLoading, deliveryType]); // Wait for authentication to be ready and watch deliveryType changes
+  }, [authLoading, deliveryType, isLocationLoading, isLocationReady, defaultAddress]); // Wait for authentication to be ready and watch deliveryType and address changes
 
   // Show loading only for delivery mode or auth loading
   if (authLoading) {
@@ -94,11 +115,24 @@ const HomeClient: React.FC<HomeClientProps> = ({
     );
   }
 
+  // Show location loading indicator
+  if (deliveryType === "delivery" && (isLocationLoading || !isLocationReady)) {
+    return (
+      <div className="min-h-screen">
+        <LocationLoadingIndicator 
+          isLocationLoading={isLocationLoading}
+          isLocationReady={isLocationReady}
+          className="py-20"
+        />
+      </div>
+    );
+  }
+
   // Show loading for delivery mode when fetching products
   if (deliveryType === "delivery" && loading) {
     return (
       <div className="text-center py-10">
-        <div className="text-gray-500">Loading products...</div>
+        <div className="text-gray-500">Loading products with stock information...</div>
       </div>
     );
   }
